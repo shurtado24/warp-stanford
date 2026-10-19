@@ -9,7 +9,7 @@ use warp_util::path::LineAndColumnArg;
 use warpui::elements::{
     Align, ChildView, ConstrainedBox, Container, CrossAxisAlignment, DragBarSide, Element, Empty,
     Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Resizable,
-    ResizableStateHandle, Shrinkable, resizable_state_handle,
+    ResizableStateHandle, SavePosition, Shrinkable, resizable_state_handle,
 };
 use warpui::fonts::Weight;
 use warpui::platform::Cursor;
@@ -66,8 +66,9 @@ use crate::workspace::view::global_search::view::{
 use crate::workspace::view::{
     LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME, LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME,
     LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME, LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
-    OPEN_GLOBAL_SEARCH_BINDING_NAME, TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME,
-    TOGGLE_PROJECT_EXPLORER_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
+    OPEN_GLOBAL_SEARCH_BINDING_NAME, SHOW_SETTINGS_KEYBINDING_NAME,
+    TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME, TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
+    TOGGLE_WARP_DRIVE_BINDING_NAME, TOOLS_PANEL_SETTINGS_BUTTON_POSITION_ID,
 };
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -216,6 +217,7 @@ pub struct LeftPanelView {
     resizable_state_handle: ResizableStateHandle,
     mouse_state_handles: MouseStateHandles,
     close_button_mouse_state: MouseStateHandle,
+    settings_button_mouse_state: MouseStateHandle,
     warp_drive_view: ViewHandle<DrivePanel>,
     conversation_list_view: ViewHandle<ConversationListView>,
     active_view: active_view_state::ActiveViewState,
@@ -466,6 +468,7 @@ impl LeftPanelView {
             resizable_state_handle,
             mouse_state_handles: Default::default(),
             close_button_mouse_state: Default::default(),
+            settings_button_mouse_state: Default::default(),
             warp_drive_view,
             conversation_list_view,
             active_view: active_view_state::new(active_view),
@@ -1027,6 +1030,51 @@ impl LeftPanelView {
         .finish()
     }
 
+    /// Renders a button that opens Settings. Unlike toolbelt buttons, it does not select a panel
+    /// view and is never shown as active.
+    fn settings_button(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
+        let ui_builder = appearance.ui_builder().clone();
+        let tooltip_keybinding =
+            keybinding_name_to_display_string(SHOW_SETTINGS_KEYBINDING_NAME, app);
+
+        let tooltip = if let Some(keybinding) = tooltip_keybinding {
+            ui_builder
+                .tool_tip_with_sublabel("Settings".to_string(), keybinding)
+                .build()
+                .finish()
+        } else {
+            ui_builder.tool_tip("Settings".to_string()).build().finish()
+        };
+
+        let icon_color = appearance
+            .theme()
+            .sub_text_color(appearance.theme().background())
+            .into_solid();
+
+        let button = icon_button(
+            appearance,
+            Icon::Gear,
+            false,
+            self.settings_button_mouse_state.clone(),
+        )
+        .with_tooltip(move || tooltip)
+        .with_style(UiComponentStyles {
+            font_color: Some(icon_color),
+            height: Some(24.),
+            width: Some(24.),
+            padding: Some(Coords::uniform(4.)),
+            ..Default::default()
+        })
+        .build()
+        .on_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(WorkspaceAction::ShowSettings);
+        })
+        .with_cursor(Cursor::PointingHand)
+        .finish();
+
+        SavePosition::new(button, TOOLS_PANEL_SETTINGS_BUTTON_POSITION_ID).finish()
+    }
+
     fn update_button_active_states(&mut self) {
         for button in &mut self.toolbelt_buttons {
             button.render_with_active_state = match &button.action {
@@ -1312,22 +1360,25 @@ impl View for LeftPanelView {
 
         // If there is only one button in the toolbelt row,
         // there is no need to show it as it's a bit redundant.
-        let toolbelt_button_row = if self.toolbelt_buttons.len() > 1 {
-            Some(
-                Flex::row()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_spacing(4.0)
-                    .with_children(self.toolbelt_buttons.iter().zip(&mouse_state_handles).map(
-                        |(button_config, mouse_state)| {
-                            Self::render_button(button_config, mouse_state.clone(), appearance)
-                        },
-                    ))
-                    .with_main_axis_size(MainAxisSize::Min)
-                    .finish(),
-            )
+        let toolbelt_button_elements: Vec<Box<dyn Element>> = if self.toolbelt_buttons.len() > 1 {
+            self.toolbelt_buttons
+                .iter()
+                .zip(&mouse_state_handles)
+                .map(|(button_config, mouse_state)| {
+                    Self::render_button(button_config, mouse_state.clone(), appearance)
+                })
+                .collect()
         } else {
-            None
+            Vec::new()
         };
+
+        let header_left = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_spacing(4.0)
+            .with_children(toolbelt_button_elements)
+            .with_child(self.settings_button(appearance, app))
+            .with_main_axis_size(MainAxisSize::Min)
+            .finish();
 
         let active_view = self.active_view.get();
         let availability = self.active_view_availability(app);
@@ -1377,12 +1428,6 @@ impl View for LeftPanelView {
 
         let panel_content = Container::new({
             let column = Flex::column();
-
-            let header_left = if let Some(row) = toolbelt_button_row {
-                row
-            } else {
-                Flex::row().finish()
-            };
 
             let header_row = Container::new(
                 ConstrainedBox::new(

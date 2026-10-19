@@ -724,6 +724,7 @@ const MOBILE_OVERLAY_SCRIM_ALPHA: u8 = 128;
 
 pub const NEW_TAB_BUTTON_POSITION_ID: &str = "new_tab_button";
 pub const NEW_SESSION_MENU_BUTTON_POSITION_ID: &str = "new_session_menu_button";
+pub const TOOLS_PANEL_SETTINGS_BUTTON_POSITION_ID: &str = "left_panel:settings_button";
 
 /// Save position for the feature-intro popover, so the changelog chip can float
 /// just above it (see `feature_intro_chip_positioning`).

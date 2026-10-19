@@ -44,14 +44,14 @@ The change is a small, additive UI entry point to an existing action, so it is n
 
 ## Testing and validation
 ### Integration test (`crates/integration/`)
-Wrap the Settings button in a `SavePosition` with a stable id (for example, `"left_panel:settings_button"`), following the existing `"workspace:toggle_left_panel"` pattern used by `crates/integration/src/test.rs`. Add a test that:
+Wrap the Settings button in a `SavePosition` with a stable id exported as `TOOLS_PANEL_SETTINGS_BUTTON_POSITION_ID` (`"left_panel:settings_button"`) from `warp::workspace`, following the existing `NEW_TAB_BUTTON_POSITION_ID` pattern. Add a test that:
 1. Opens the Tools Panel and asserts it is open (`assert_is_left_panel_open`).
 2. Clicks `"left_panel:settings_button"` and asserts a pane titled "Settings" is open and focused (invariant 5, first bullet), following the assertions in `crates/integration/src/test/settings_navigation.rs` and `session_restoration.rs`.
 3. Asserts the Tools Panel is still open with the same active view (invariant 6).
 4. Returns to the original tab, clicks the button again, and asserts there is still exactly one Settings tab and it is focused (invariant 5, second bullet).
 
 ### Unit test (`app/src/workspace/view_tests.rs`)
-Following `test_tools_panel_warp_drive_toggle_updates_available_views` (`view_tests.rs:5415`), add a test that disables all but one Tools Panel view and asserts the panel's header still includes the Settings button while the single view button is hidden (invariant 8). This requires a small `#[cfg(test)]` accessor on `LeftPanelView` (for example, `fn shows_settings_button(&self) -> bool` / `fn shows_toolbelt_row(&self) -> bool`) because `toolbelt_buttons` is private.
+Following `test_tools_panel_warp_drive_toggle_updates_available_views` (`view_tests.rs:5415`), add a test that opens the Tools Panel with a single available view, renders the window, and asserts the Settings button's saved position is present in the presenter's position cache (invariant 8). Checking the rendered frame, rather than adding a test-only accessor, verifies what is actually drawn.
 
 ### Manual validation (screenshots required for the PR)
 - Open the Tools Panel and confirm the gear icon appears after the view buttons and before the X, matching the issue screenshot. Capture before/after screenshots (invariants 1–3).
