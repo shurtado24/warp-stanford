@@ -15402,6 +15402,11 @@ impl Workspace {
         self.active_tab_pane_group().as_ref(ctx).left_panel_open
     }
 
+    #[cfg(feature = "integration_tests")]
+    pub(crate) fn left_panel_active_view(&self, ctx: &AppContext) -> ToolPanelView {
+        self.left_panel_view.as_ref(ctx).active_view()
+    }
+
     fn is_readonly_shared_session_active(&self, ctx: &mut ViewContext<Self>) -> bool {
         let active_terminal_view = self
             .active_tab_pane_group()

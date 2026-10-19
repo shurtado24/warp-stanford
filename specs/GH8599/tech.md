@@ -22,11 +22,11 @@ Relevant code:
 ### 1. Render a Settings button in the Tools Panel header
 Add a `settings_button_mouse_state: MouseStateHandle` field to `LeftPanelView` alongside `close_button_mouse_state`, initialized once in `LeftPanelView::new`. Per the repo's WarpUI rules, the handle must be stored on the view and cloned during render, never created inline.
 
-Add a `settings_button(&self, appearance, app) -> Box<dyn Element>` method modeled on `close_button`:
+Add a `settings_button(&self, appearance, app) -> Box<dyn Element>` method:
 - Icon: `Icon::Gear`, matching the tab bar Settings button.
-- Color and sizing: the same inactive color and `icon_button` styling used by `render_button` for a non-active toolbelt button, so the icon is visually indistinguishable in style from its neighbors (product invariant 3).
+- Color and sizing: extract the styling `render_button` applies (icon color, 24x24 size, 4px padding, active background, tooltip with keybinding sublabel, pointing-hand cursor) into a shared `toolbelt_icon_button` helper that both `render_button` and `settings_button` call with `is_active` set appropriately. Sharing one helper keeps the gear visually identical to its neighbors and prevents the two from drifting (product invariant 3).
 - Tooltip: `"Settings"`, with a sublabel from `keybinding_name_to_display_string("workspace:show_settings", app)` when a binding exists (invariant 4). Reading the binding at render time, as `close_button` does, keeps the tooltip correct after the user rebinds or unbinds the shortcut without extra event plumbing.
-- Click: `ctx.dispatch_typed_action(WorkspaceAction::ShowSettings)`, reusing the existing Settings flow end-to-end (invariant 5). Cursor: `Cursor::PointingHand` (invariant 3).
+- Click: `ctx.dispatch_typed_action(WorkspaceAction::ShowSettings)`, reusing the existing Settings flow end-to-end (invariant 5).
 
 This button is intentionally **not** added to `toolbelt_buttons` and does not get a `LeftPanelAction` variant:
 - `toolbelt_buttons` represents selectable panel views and drives the active-state highlight. Keeping Settings out of it guarantees the icon never renders as active and never changes the active view (invariant 6), with no new match arms in `update_button_active_states` or `handle_action_with_force_open`.
@@ -34,7 +34,7 @@ This button is intentionally **not** added to `toolbelt_buttons` and does not ge
 
 ### 2. Compose the header row
 In `LeftPanelView::render`, build the left side of the header as a `Flex::row()` (same `CrossAxisAlignment::Center` and 4px spacing as the toolbelt) containing:
-1. the existing toolbelt row, only when `toolbelt_buttons.len() > 1` (unchanged rule, so a single view button stays hidden — invariant 8), then
+1. the existing toolbelt buttons, only when `toolbelt_buttons.len() > 1` (unchanged rule, so a single view button stays hidden — invariant 8), then
 2. the Settings button, always.
 
 The close button stays as the right-aligned child, so the Settings icon sits after the view buttons and before the X (invariant 2). Because the header is part of `LeftPanelView`, the icon automatically follows the panel when docked right (`panel_position`) and is not shown when the panel is closed (invariant 9). There is no gating on login, AI state, or the Tools panel visibility settings (invariant 7).
@@ -45,10 +45,11 @@ The change is a small, additive UI entry point to an existing action, so it is n
 ## Testing and validation
 ### Integration test (`crates/integration/`)
 Wrap the Settings button in a `SavePosition` with a stable id exported as `TOOLS_PANEL_SETTINGS_BUTTON_POSITION_ID` (`"left_panel:settings_button"`) from `warp::workspace`, following the existing `NEW_TAB_BUTTON_POSITION_ID` pattern. Add a test that:
-1. Opens the Tools Panel and asserts it is open (`assert_is_left_panel_open`).
-2. Clicks `"left_panel:settings_button"` and asserts a pane titled "Settings" is open and focused (invariant 5, first bullet), following the assertions in `crates/integration/src/test/settings_navigation.rs` and `session_restoration.rs`.
-3. Asserts the Tools Panel is still open with the same active view (invariant 6).
-4. Returns to the original tab, clicks the button again, and asserts there is still exactly one Settings tab and it is focused (invariant 5, second bullet).
+1. Opens the Tools Panel, asserts it is open (`assert_is_left_panel_open`), and records the panel's active view.
+2. Clicks the Settings button and asserts a second tab (Settings) is open and focused (invariant 5, first bullet).
+3. Navigates Settings to the Appearance page (`click_settings_nav_page`), so later assertions do not depend on the default Settings page.
+4. Returns to the original tab and asserts the Tools Panel is still open with the same active view it had before the click (invariant 6). The active view is read through a `Workspace::left_panel_active_view` accessor gated on the `integration_tests` feature.
+5. Clicks the button again and asserts there are still exactly two tabs, the Settings tab is focused, and it is still on the Appearance page (invariant 5, second bullet).
 
 ### Unit test (`app/src/workspace/view_tests.rs`)
 Following `test_tools_panel_warp_drive_toggle_updates_available_views` (`view_tests.rs:5415`), add a test that opens the Tools Panel with a single available view, renders the window, and asserts the Settings button's saved position is present in the presenter's position cache (invariant 8). Checking the rendered frame, rather than adding a test-only accessor, verifies what is actually drawn.

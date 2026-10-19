@@ -5496,8 +5496,8 @@ fn test_tools_panel_warp_drive_toggle_updates_available_views() {
     });
 }
 
-/// The tools panel hides its lone view button when only one view is available, but the Settings
-/// button must still be rendered so Settings stays reachable from the panel.
+/// The Settings button must render in the tools panel header even when only one view is
+/// available, so Settings stays reachable from the panel.
 #[test]
 fn test_tools_panel_settings_button_rendered_with_single_view() {
     App::test((), |mut app| async move {
